@@ -46,6 +46,44 @@ from mcp.types import (
 BASE_URL = "https://courses.sci.pitt.edu"
 COURSES_URL = f"{BASE_URL}/courses"
 
+class CourseSection:
+    """Represents a single course section with scheduling information"""
+    def __init__(self, class_number: str = "", days: str = "", times: str = "", 
+                 room: str = "", instructor: str = "", section_type: str = "", 
+                 tas: str = ""):
+        self.class_number = class_number
+        self.days = days
+        self.times = times
+        self.room = room
+        self.instructor = instructor
+        self.section_type = section_type  # LEC, REC, LAB, etc.
+        self.tas = tas  # Teaching assistants
+        
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "class_number": self.class_number,
+            "days": self.days,
+            "times": self.times,
+            "room": self.room,
+            "instructor": self.instructor,
+            "section_type": self.section_type,
+            "tas": self.tas
+        }
+        
+    def __str__(self) -> str:
+        parts = []
+        if self.class_number:
+            parts.append(f"#{self.class_number}")
+        if self.section_type:
+            parts.append(f"({self.section_type})")
+        if self.days and self.times:
+            parts.append(f"{self.days} {self.times}")
+        if self.room:
+            parts.append(f"@ {self.room}")
+        if self.instructor:
+            parts.append(f"- {self.instructor}")
+        return " ".join(parts)
+
 class Course:
     """Represents a course with its details"""
     def __init__(self, code: str, title: str, url: str):
@@ -60,6 +98,8 @@ class Course:
         self.career = ""
         self.component = ""
         self.grade_component = ""
+        self.sections: List[CourseSection] = []  # Current semester sections
+        self.current_semester = ""  # e.g., "Fall 2025"
         
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -73,7 +113,9 @@ class Course:
             "credits_max": self.credits_max,
             "career": self.career,
             "component": self.component,
-            "grade_component": self.grade_component
+            "grade_component": self.grade_component,
+            "sections": [section.to_dict() for section in self.sections],
+            "current_semester": self.current_semester
         }
 
 class PittCoursesClient:
@@ -153,11 +195,121 @@ class PittCoursesClient:
             component_match = re.search(r'Course Component:\s*([^·]+)', text)
             if component_match:
                 course.component = component_match.group(1).strip()
+            
+            # Parse current semester information
+            semester_match = re.search(r'Current Sections\s+([A-Za-z]+ \d{4})', text)
+            if semester_match:
+                course.current_semester = semester_match.group(1)
+            
+            # Parse current sections table
+            course.sections = self._parse_sections_table(soup, text)
                 
         except Exception as e:
             print(f"Error parsing course details for {course.code}: {e}")
             
         return course
+        
+    def _parse_sections_table(self, soup: BeautifulSoup, text: str) -> List[CourseSection]:
+        """Parse the Current Sections table from the course page"""
+        sections = []
+        
+        try:
+            # Look for the Current Sections section in the text
+            # The format appears to be lines with class info like:
+            # "18582 (1100) TuTh 1:00pm-2:15pm LAWRN 104 Marina Barsky LEC"
+            
+            # Find the Current Sections part of the text
+            current_sections_match = re.search(r'Current Sections.*?(?=School of Computing|$)', text, re.DOTALL | re.IGNORECASE)
+            if not current_sections_match:
+                return sections
+                
+            sections_text = current_sections_match.group(0)
+            
+            # Parse individual section lines
+            # Pattern: Class# (Section#) Days Times Room Instructor Type [TAs]
+            section_pattern = r'(\d+)\s+\((\d+)\)\s+([A-Za-z]+)\s+([0-9:apmn-]+)\s+([A-Z0-9\s]+?)\s+([A-Za-z\s]+?)\s+(LEC|REC|LAB)'
+            
+            matches = re.findall(section_pattern, sections_text)
+            
+            for match in matches:
+                class_number = match[0]
+                section_number = match[1]  # Not currently stored but available
+                days = match[2]
+                times = match[3]
+                room = match[4].strip()
+                instructor = match[5].strip()
+                section_type = match[6]
+                
+                section = CourseSection(
+                    class_number=class_number,
+                    days=days,
+                    times=times,
+                    room=room,
+                    instructor=instructor,
+                    section_type=section_type
+                )
+                sections.append(section)
+            
+            # If the regex approach doesn't work well, try a different approach
+            # looking for patterns in the raw text
+            if not sections:
+                # Alternative parsing: look for class numbers followed by scheduling info
+                lines = sections_text.split('\n')
+                current_section = None
+                
+                for line in lines:
+                    line = line.strip()
+                    if not line:
+                        continue
+                        
+                    # Look for class number pattern at start of line
+                    class_match = re.match(r'(\d{5})\s+\((\d+)\)\s+(.+)', line)
+                    if class_match:
+                        class_number = class_match.group(1)
+                        section_info = class_match.group(3)
+                        
+                        # Parse the rest of the line for schedule info
+                        # Try to extract days, times, room, instructor, type
+                        info_parts = section_info.split()
+                        if len(info_parts) >= 4:
+                            days = info_parts[0] if re.match(r'[A-Za-z]+$', info_parts[0]) else ''
+                            times = info_parts[1] if re.match(r'[0-9:apmn-]+', info_parts[1]) else ''
+                            
+                            # Find room and instructor by looking for patterns
+                            room = ''
+                            instructor = ''
+                            section_type = ''
+                            
+                            for i, part in enumerate(info_parts[2:], 2):
+                                if re.match(r'[A-Z]+\s*\d+', part):  # Room pattern
+                                    room = ' '.join(info_parts[i:i+2]) if i+1 < len(info_parts) else part
+                                elif part in ['LEC', 'REC', 'LAB']:
+                                    section_type = part
+                                elif not section_type and re.match(r'[A-Za-z]', part):  # Instructor name
+                                    instructor_parts = []
+                                    for j in range(i, len(info_parts)):
+                                        if info_parts[j] not in ['LEC', 'REC', 'LAB']:
+                                            instructor_parts.append(info_parts[j])
+                                        else:
+                                            section_type = info_parts[j]
+                                            break
+                                    instructor = ' '.join(instructor_parts)
+                                    break
+                            
+                            section = CourseSection(
+                                class_number=class_number,
+                                days=days,
+                                times=times,
+                                room=room.strip(),
+                                instructor=instructor.strip(),
+                                section_type=section_type
+                            )
+                            sections.append(section)
+                            
+        except Exception as e:
+            print(f"Error parsing sections table: {e}")
+            
+        return sections
         
     async def get_all_courses(self, refresh: bool = False) -> List[Course]:
         """Get all courses, using cache if available"""
@@ -334,6 +486,20 @@ async def handle_list_tools() -> list[Tool]:
                 },
                 "required": ["course_code"]
             }
+        ),
+        Tool(
+            name="get_course_sections",
+            description="Get current semester sections for a course including instructors, times, and rooms",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "course_code": {
+                        "type": "string",
+                        "description": "Course code (e.g., 'CS-0445' or 'CS 0445')"
+                    }
+                },
+                "required": ["course_code"]
+            }
         )
     ]
 
@@ -413,6 +579,36 @@ async def handle_call_tool(name: str, arguments: dict) -> CallToolResult:
                 
             if course.component:
                 details.append(f"**Component**: {course.component}")
+            
+            # Add current sections information if available
+            if course.current_semester:
+                details.append(f"**Current Semester**: {course.current_semester}")
+                
+            if course.sections:
+                details.append(f"\n**Current Sections** ({len(course.sections)} total):")
+                
+                # Group by section type for cleaner display
+                lectures = [s for s in course.sections if s.section_type == 'LEC']
+                recitations = [s for s in course.sections if s.section_type == 'REC']
+                
+                if lectures:
+                    details.append(f"- **Lectures**: {len(lectures)} section(s)")
+                    for lec in lectures[:3]:  # Show max 3 to keep it concise
+                        details.append(f"  - #{lec.class_number}: {lec.days} {lec.times} with {lec.instructor}")
+                    if len(lectures) > 3:
+                        details.append(f"  - ... and {len(lectures) - 3} more")
+                        
+                if recitations:
+                    details.append(f"- **Recitations**: {len(recitations)} section(s)")
+                    if len(recitations) <= 2:
+                        for rec in recitations:
+                            details.append(f"  - #{rec.class_number}: {rec.days} {rec.times}")
+                    else:
+                        details.append(f"  - Multiple time slots available")
+                        
+                details.append(f"\n*Use `get_course_sections` for complete scheduling details*")
+            elif course.current_semester:
+                details.append(f"\n**Current Sections**: No sections found for {course.current_semester}")
                 
             details.append(f"\n**URL**: {course.url}")
             
@@ -539,6 +735,95 @@ async def handle_call_tool(name: str, arguments: dict) -> CallToolResult:
             
         except Exception as e:
             raise McpError(ErrorCode.INTERNAL_ERROR, f"Failed to find prerequisite chain: {str(e)}")
+    
+    elif name == "get_course_sections":
+        course_code = arguments.get("course_code", "")
+        
+        if not course_code:
+            return CallToolResult(content=[TextContent(type="text", text="Course code is required")])
+            
+        try:
+            course = await client.get_course_details(course_code)
+            
+            if not course:
+                return CallToolResult(content=[TextContent(
+                    type="text", 
+                    text=f"Course '{course_code}' not found"
+                )])
+                
+            result = [f"# Current Sections for {course.code}: {course.title}"]
+            
+            if course.current_semester:
+                result.append(f"**Semester**: {course.current_semester}")
+                result.append("")
+                
+            if not course.sections:
+                result.append("No current sections found for this course.")
+                result.append("")
+                result.append("This could mean:")
+                result.append("- The course is not offered this semester")
+                result.append("- Section information is not yet available")
+                result.append("- There was an issue parsing the section data")
+                return CallToolResult(content=[TextContent(type="text", text="\n".join(result))])
+                
+            # Group sections by type (LEC, REC, LAB)
+            lectures = [s for s in course.sections if s.section_type == 'LEC']
+            recitations = [s for s in course.sections if s.section_type == 'REC']
+            labs = [s for s in course.sections if s.section_type == 'LAB']
+            other = [s for s in course.sections if s.section_type not in ['LEC', 'REC', 'LAB']]
+            
+            if lectures:
+                result.append("## Lectures")
+                for section in lectures:
+                    result.append(f"- **Class #{section.class_number}**: {section.days} {section.times}")
+                    if section.room:
+                        result.append(f"  - Room: {section.room}")
+                    if section.instructor:
+                        result.append(f"  - Instructor: {section.instructor}")
+                result.append("")
+                
+            if recitations:
+                result.append("## Recitations")
+                for section in recitations:
+                    result.append(f"- **Class #{section.class_number}**: {section.days} {section.times}")
+                    if section.room:
+                        result.append(f"  - Room: {section.room}")
+                    if section.instructor:
+                        result.append(f"  - Instructor: {section.instructor}")
+                result.append("")
+                
+            if labs:
+                result.append("## Labs")
+                for section in labs:
+                    result.append(f"- **Class #{section.class_number}**: {section.days} {section.times}")
+                    if section.room:
+                        result.append(f"  - Room: {section.room}")
+                    if section.instructor:
+                        result.append(f"  - Instructor: {section.instructor}")
+                result.append("")
+                
+            if other:
+                result.append("## Other Sections")
+                for section in other:
+                    section_type = f" ({section.section_type})" if section.section_type else ""
+                    result.append(f"- **Class #{section.class_number}{section_type}**: {section.days} {section.times}")
+                    if section.room:
+                        result.append(f"  - Room: {section.room}")
+                    if section.instructor:
+                        result.append(f"  - Instructor: {section.instructor}")
+                result.append("")
+                
+            # Summary
+            total_sections = len(course.sections)
+            result.append(f"**Total Sections**: {total_sections} ({len(lectures)} lectures, {len(recitations)} recitations, {len(labs)} labs)")
+            
+            return CallToolResult(content=[TextContent(
+                type="text", 
+                text="\n".join(result)
+            )])
+            
+        except Exception as e:
+            raise McpError(ErrorCode.INTERNAL_ERROR, f"Failed to get course sections: {str(e)}")
     
     else:
         raise McpError(ErrorCode.METHOD_NOT_FOUND, f"Unknown tool: {name}")
