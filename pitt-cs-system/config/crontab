@@ -1,0 +1,15 @@
+
+# Update wiki data every 6 hours
+0 */6 * * * cd /Users/shreyashranjan/Library/CloudStorage/OneDrive-UniversityofPittsburgh/CSC/Dev/pitt-cs-system && python backend/scrapers/wiki_scraper.py
+
+# Full official site scrape daily at 2 AM
+0 2 * * * cd /Users/shreyashranjan/Library/CloudStorage/OneDrive-UniversityofPittsburgh/CSC/Dev/pitt-cs-system && python backend/scrapers/official_scraper.py
+
+# Data reconciliation after updates
+30 2 * * * cd /Users/shreyashranjan/Library/CloudStorage/OneDrive-UniversityofPittsburgh/CSC/Dev/pitt-cs-system && python backend/scrapers/data_reconciler.py
+
+# Update the wiki's JSON data file
+0 3 * * * cd /Users/shreyashranjan/Library/CloudStorage/OneDrive-UniversityofPittsburgh/CSC/Dev/pitt-cs-system && python backend/scrapers/update_wiki_data.py
+
+# Weekly data quality report
+0 8 * * 0 cd /Users/shreyashranjan/Library/CloudStorage/OneDrive-UniversityofPittsburgh/CSC/Dev/pitt-cs-system && python backend/cron/quality_report.py
