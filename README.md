@@ -1,39 +1,55 @@
-# 🎓 Pitt CS Course Data System
+# 🎓 Pitt CS Course Advisor - MCP Server
 
-An intelligent course information system for University of Pittsburgh Computer Science students that combines official course data with community-driven insights from the student wiki.
+A **Model Context Protocol (MCP) server** that acts as an intelligent middleman between official Pitt/SCI documentation and the student wiki, ensuring course information stays automatically updated and accessible through Claude AI.
 
 ## 🚀 What This Does
 
-**Problem**: Students struggle to navigate the CS curriculum because course information is scattered across:
-- Official course catalogs (often outdated)
-- Student wiki (up-to-date but unstructured)  
-- Word-of-mouth recommendations
-- Prerequisites buried in complex text
+**Problem**: The existing student wiki is fantastic but static - created by students in the past, it becomes outdated as courses, prerequisites, and requirements change over time.
 
-**Solution**: An AI-powered course advisor that you can ask natural questions like:
-- *"What's the easiest path to graduate with an AI focus?"*
-- *"Is CS 1675 harder than CS 1501?"*
-- *"What prerequisites do I need for CS 1980?"*
-- *"Find me machine learning courses that aren't math-heavy"*
+**Solution**: An MCP server that:
+- 🔄 **Automatically syncs** with official Pitt and SCI documentation 
+- 📚 **Keeps the wiki current** without manual student updates
+- 🤖 **Provides AI-powered** course advisory through Claude
+- ⚡ **Runs on a schedule** (cron jobs) to ensure data freshness
+
+**Ask Claude natural questions like:**
+- *"What's the current path to graduate with an AI focus?"*
+- *"Has CS 1675 changed its prerequisites recently?"*
+- *"What are the latest course offerings for Spring 2024?"*
+- *"Find me courses that satisfy the ethics requirement"*
 
 ## 🏗️ Architecture Overview
 
+The **MCP server acts as the intelligent middleman** that keeps the student wiki current by continuously syncing with official sources:
+
 ```
 ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   DATA SOURCES  │    │    BACKEND      │    │   AI INTERFACE  │
-│                 │    │                 │    │                 │
-│ • pittcs.wiki   │───▶│ • Smart merger  │───▶│ • Claude MCP    │
-│ • courses.sci.  │    │ • SQLite DB     │    │ • Natural lang  │
-│   pitt.edu      │    │ • Cron updates  │    │ • Conversation  │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+│ OFFICIAL SOURCES│    │   MCP SERVER    │    │  STUDENT WIKI   │
+│                 │    │  (MIDDLEMAN)    │    │                 │
+│ • Pitt Course   │────┤ • Auto sync     │───▶│ • Always current│
+│   Catalog       │    │ • Data merger   │    │ • Student tips  │
+│ • SCI Docs      │    │ • Conflict res  │    │ • Community     │
+│ • Requirements  │    │ • Cron jobs     │    │   insights      │
+└─────────────────┘    │ • Claude AI     │    └─────────────────┘
+                       └─────────────────┘            
+                              │                       
+                              ▼                       
+                    ┌─────────────────┐               
+                    │     STUDENTS    │               
+                    │                 │               
+                    │ Ask Claude:     │               
+                    │ • Course advice │               
+                    │ • Requirements  │               
+                    │ • Prerequisites │               
+                    └─────────────────┘               
 ```
 
-### Data Flow
-1. **Scrapers** pull data from official site + student wiki every 6 hours
-2. **Smart merger** resolves conflicts (wiki wins for tips, official wins for requirements)
-3. **Database** stores unified course information with conflict tracking
-4. **MCP Server** provides conversational interface to Claude
-5. **Students** ask Claude natural language questions about courses
+### How It Works
+1. **🔄 Automated Sync**: Cron jobs regularly pull latest data from official Pitt/SCI sources
+2. **🤝 Smart Merging**: MCP server intelligently combines official data with existing wiki content
+3. **📚 Wiki Updates**: Student wiki stays current without manual intervention
+4. **🤖 AI Interface**: Students interact with always-fresh data through Claude
+5. **🎯 Best of Both**: Official accuracy + community insights, automatically maintained
 
 ## 🛠️ Tech Stack
 
@@ -138,30 +154,36 @@ The system automatically updates course data:
 
 ## 🎯 Key Features
 
-### **Smart Data Reconciliation**
-- **Official data** wins for: course codes, credits, enrollment
-- **Wiki data** wins for: descriptions, difficulty ratings, tips
-- **Smart merge** for: prerequisites (combines both sources)
-- **Conflict detection** when sources disagree
+### **🔄 Always-Current Data (The Main Innovation)**
+- **No more outdated wikis**: MCP server continuously syncs with official sources
+- **Set-and-forget updates**: Cron jobs ensure data freshness without manual work
+- **Future-proof**: As Pitt changes courses/requirements, the system automatically adapts
+- **Zero maintenance burden**: Students always get current information
 
-### **Natural Language Queries**
+### **🤝 Smart Data Reconciliation**
+- **Official data** wins for: course codes, credits, enrollment, requirements
+- **Wiki data** wins for: descriptions, difficulty ratings, student tips
+- **Smart merge** for: prerequisites (combines both sources intelligently)
+- **Conflict detection**: Alerts when sources disagree for manual review
+
+### **🤖 Natural Language Queries via Claude**
 Students can ask conversational questions:
-- "What's the workload like for CS 1666?"
-- "Show me all courses with no prerequisites"
+- "What's the current workload like for CS 1666?"
+- "Show me all courses with no prerequisites this semester"
 - "Which AI courses can I take after CS 1675?"
-- "What's the difference between CS 1501 and CS 1502?"
+- "Have the CS degree requirements changed recently?"
 
-### **Prerequisite Chain Analysis**
+### **🔗 Prerequisite Chain Analysis**
 - Automatically maps prerequisite relationships
-- Shows full prerequisite trees
+- Shows full prerequisite trees with current requirements
 - Identifies circular dependencies
-- Suggests course sequences
+- Suggests optimal course sequences for graduation
 
-### **Student Wiki Integration**
-- Real-time updates from pittcs.wiki
-- Student reviews and difficulty ratings
-- Professor recommendations
-- Course tips and insights
+### **📚 Dynamic Wiki Enhancement**
+- Preserves valuable student insights and reviews
+- Adds fresh official data without losing community knowledge
+- Maintains difficulty ratings and professor recommendations
+- Combines institutional accuracy with student experience
 
 ## 📊 Database Schema
 
